@@ -1,7 +1,18 @@
 <?php
 session_start();
+$servername = "localhost";
+$username = "root";
+$password = "";
+$dbname = "unicore";
 
-$request = 0;
+$conn = null;
+$conn = new mysqli($servername, $username, $password, $dbname);
+
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+$sql = "";
 
 function device_information()
 {
@@ -38,83 +49,73 @@ function device_information()
   $ip_name = $_SERVER['REMOTE_ADDR'];
   $device_name = gethostbyaddr($ip_name);
 
-  return [$ip, $os, $browser, $device_name]
+  return [$ip, $os, $browser, $device_name];
 }
 
+if(!isset($_SESSION['reg_device'])) {
+  $_SESSION['reg_device'] = generateRandomID();
+  $ip = device_information()[0];
+  $os = device_information()[1];
+  $browser = device_information()[2];
+  $device_name = device_information()[3];
 
-if(isset($_GET['reg'])) {
-  if ($_GET['reg'] == "true") {
-    if(!isset($_SESSION['reg_device'])) {
-      $_SESSION['reg_device'] = generateRandomString();
-      echo $_SESSION['reg_device'];
-    }else {
-      echo "Your device is registed";
-    }
-    $request = 1;
-  }
+  reg_in_db($conn, $ip, $os, $browser, $device_name);
 }else {
-  if(isset($_SESSION['reg_device'])) {
-    echo $_SESSION['reg_device'];
-  }else {
-    header("location: reg_device.php?reg=new");
-  }
-}
-
-if(isset($_GET['reg'])) {
-  if ($_GET['reg'] == "new") {
-    $_SESSION['reg_device'] = "";
-    $_SESSION['reg_device'] = generateRandomString();
-    echo $_SESSION['reg_device'];
-    $request = 1;
-  }
-}else {
-  echo $_SESSION['reg_device'];
-}
-
-if ($request == 0) {
-  echo "Request are not existing. Error Code: 34927.";
+  reg_in_db($conn, "", "", "", "");
 }
 
 // Überprüfen, ob eine ID angegeben wurde, um ein vorhandenes Gerät zu registrieren
-if (isset($_POST['id'])) {
-    $id = $_POST['id'];
+function reg_in_db($conn, $ip, $os, $browser, $device_name)
+{
 
-    // Überprüfen, ob die ID bereits in der Datenbank vorhanden ist
+  // Überprüfen, ob die ID bereits in der Datenbank vorhanden ist
+  if(isset($_SESSION['ID'])) {
+    $id = $_SESSION['ID'];
     $sql = "SELECT * FROM devices WHERE id='$id'";
     $result = $conn->query($sql);
 
     if ($result->num_rows > 0) {
         // ID bereits in der Datenbank vorhanden
-        echo "Dieses Gerät wurde bereits registriert.";
+        echo "You device is registred. You device log in.";
+        exit;
     } else {
-        // ID in der Datenbank speichern
-        $sql = "INSERT INTO devices (id) VALUES ('$id')";
-        if ($conn->query($sql) === TRUE) {
-            echo "Das Gerät wurde erfolgreich registriert.";
-        } else {
-            echo "Fehler: " . $sql . "<br>" . $conn->error;
-        }
+        echo "Error. The Authentification of this device is failed. The system can not resolved this devices. Please contact the support or delete all cookies to reset the device in the system. Thank you. If the system function the system registered this device automatically.";
+        session_destroy();
+        exit;
     }
-} else {
-    // Neues Gerät anmelden
-    $name = $_POST['name'];
-    $model = $_POST['model'];
-    $os = $_POST['os'];
+  }
 
-    // Geräteinformationen in der Datenbank speichern
-    $sql = "INSERT INTO devices (device_id, device_os, device_name, device_browser, device_ip) VALUES ('$os', '$model', '$os')";
+  if (isset($_SESSION['reg_device'])) {
+
+    $id = $_SESSION['reg_device'];
+    $sql = "SELECT * FROM devices WHERE id='$id'";
+    $result = $conn->query($sql);
+
+    do {
+      $_SESSION['reg_device'] = generateRandomID();
+    } while ($result->num_rows > 0);
+
+    $id = $_SESSION['reg_device'];
+    $sql = "INSERT INTO devices (device_id, device_os, device_name, device_browser, device_ip) VALUES ('$id', '$os', '$device_name', '$browser', '$ip')";
     if ($conn->query($sql) === TRUE) {
-        echo "Das Gerät wurde erfolgreich angemeldet.";
+      $last_id = $conn->insert_id;
+      $_SESSION['ID'] = $last_id;
+      echo "New record created successfully. Last inserted ID is: " . $last_id . "<br>";
+      echo "The device is successfully registred.";
     } else {
         echo "Error: " . $sql . "<br>" . $conn->error;
     }
+  } else {
+    $_SESSION['reg_device'] = generateRandomID();
+  }
+
+
+  // Verbindung zur Datenbank schließen
+  $conn->close();
 }
 
-// Verbindung zur Datenbank schließen
-$conn->close();
-
-function generateRandomString($length = 2500) {
-    $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!^$%&/(=?\}][{+~*#-_.:,;<>|}])';
+function generateRandomID($length = 2500) {
+    $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!^$%&/(=?}][{+~*-_.:,;<>|}])';
     $charactersLength = strlen($characters);
     $randomString = '';
     for ($i = 0; $i < $length; $i++) {
@@ -122,5 +123,3 @@ function generateRandomString($length = 2500) {
     }
     return $randomString;
 }
-
-?>
